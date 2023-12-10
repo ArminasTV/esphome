@@ -1,3 +1,5 @@
+#https://github.com/Emile86/HLK-2450/blob/main/2450.yaml
+#https://community.home-assistant.io/t/hlk-ld2450-initial-experiments-to-connect-to-homeassistant/578878/185?page=10
 esphome:
   name: esp-presence
   comment: Screek Human Sensor 2A
