@@ -1,0 +1,266 @@
+---
+substitutions:
+  name: esp32-s3-box
+  friendly_name: ESP32 S3 Box
+
+esphome:
+  name: "${name}"
+  friendly_name: "${friendly_name}"
+  min_version: 2024.8.0
+  name_add_mac_suffix: true    
+  platformio_options:
+    board_build.flash_mode: dio
+  on_boot:
+    priority: 600
+    then:
+      - lvgl.page.show: main_page
+      - component.update: my_display 
+
+
+esp32:
+  board: esp32s3box
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+      CONFIG_AUDIO_BOARD_CUSTOM: "y"
+      CONFIG_ESP32_S3_BOX_3_BOARD: "y"
+
+preferences:
+  flash_write_interval: 1min      
+
+psram:
+  mode: octal
+#  speed: 80MHz
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "WU4pPlyTlNCVBkaUYCSfyVgQ5UqtyzaV0MU8EwwVCw4="
+  on_client_connected:
+    - if:
+        condition:
+          lambda: 'return (0 == client_info.find("Home Assistant "));'
+        then:
+          - lvgl.widget.show: lbl_hastatus
+          - logger.log: "API connected"
+          - lvgl.widget.update:
+              id: lvgl_light_switch
+              state:
+                checked: !lambda return id(innr_lumiere_couleur).state;
+  on_client_disconnected:
+    - if:
+        condition:
+          lambda: 'return (0 == client_info.find("Home Assistant "));'
+        then:
+          - lvgl.widget.hide: lbl_hastatus
+
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  #on_connect:
+  #  - lvgl.page.show: main_page
+  #  - component.update: my_display
+
+web_server:
+  port: 80
+  version: 3
+
+logger:
+  hardware_uart: USB_SERIAL_JTAG
+  #level: verbose
+  logs:
+    text_sensor: WARN
+    component: ERROR
+
+switch:
+  - platform: homeassistant
+    id: innr_lumiere_couleur
+    entity_id: light.innr_lumiere_couleur   
+    on_turn_on:
+      - lvgl.widget.update:
+          id: lvgl_light_switch
+          state:
+            checked: !lambda return id(innr_lumiere_couleur).state;
+    on_turn_off:
+      - lvgl.widget.update:
+          id: lvgl_light_switch
+          state:
+            checked: !lambda return id(innr_lumiere_couleur).state;
+
+
+output:
+  - platform: ledc
+    pin: GPIO47
+    id: backlight_output
+
+light:
+  - platform: monochromatic
+    id: led
+    name: Screen
+    icon: "mdi:television"
+    entity_category: config
+    output: backlight_output
+    restore_mode: RESTORE_DEFAULT_ON
+    default_transition_length: 250ms
+
+font:
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: mdi_42
+    size: 42
+    bpp: 4
+    glyphs: [
+      "\U000F0335", # mdi-lightbulb
+      "\U000F0336", # mdi-lightbulb-outline
+      ]
+
+#-------------------------------------------
+# Touchscreen gt911 i2c
+#-------------------------------------------
+i2c:
+  - id: bus_a
+    sda: GPIO08
+    scl: GPIO18
+    scan: false
+    sda_pullup_enabled: true
+    scl_pullup_enabled: true
+    frequency: 100kHz
+
+touchscreen:
+  platform: gt911
+  i2c_id: bus_a
+  id: my_touchscreen
+  #display: my_display
+  interrupt_pin:
+    number: GPIO3
+    ignore_strapping_warning: true
+
+#-------------------------------------------
+# Display ili9xxx
+#-------------------------------------------
+spi:
+  - id: spi_bus
+    clk_pin: 7
+    mosi_pin: 6
+
+display:
+  - platform: ili9xxx
+    id: my_display
+    model: S3BOX
+    invert_colors: false
+    data_rate: 40MHz
+    cs_pin: 5
+    dc_pin: 4
+    reset_pin:
+      number: 48
+      inverted: true
+    update_interval: never
+    auto_clear_enabled: false
+
+lvgl:
+  displays: 
+    - my_display
+  touchscreens:
+    - my_touchscreen
+  theme:
+    label: 
+      bg_color: 0x2F8CD8 
+      bg_opa: 100%
+      radius: 5
+  style_definitions:
+    - id: header_footer
+      bg_color: 0x2F8CD8
+      bg_grad_color: 0x005782
+      bg_grad_dir: VER
+      bg_opa: COVER
+      border_opa: TRANSP
+      radius: 0
+      pad_all: 0
+      pad_row: 0
+      pad_column: 0
+      border_color: 0x0077b3
+      text_color: 0xFFFFFF
+      width: 100%
+      height: 30
+  pages:
+    - id: main_page
+      widgets:
+        - obj:
+            align: CENTER 
+            #pad_all: 0
+            #outline_width: 0
+            id: top_layer
+            layout: # enable the FLEX layout for the children widgets
+              type: FLEX
+              flex_flow: ROW # the order of the widgets starts top left
+              flex_align_cross: CENTER # they sould be centered
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            widgets:
+              - label:
+                  text: "Ampoule"
+              - switch: 
+                  id: lvgl_light_switch
+                  on_click:
+                    switch.toggle: innr_lumiere_couleur 
+    
+    - id: left_page
+      widgets:
+        - label:
+            text: "LEFT ESPHOME"
+            align: TOP_MID
+            y: 20
+            text_font: montserrat_34
+            text_align: right
+            text_color: 0xFFFFFF  
+  
+    - id: right_page
+      widgets:
+        - label:
+            text: "RIGHT ESPHOME"
+            align: TOP_MID
+            y: 20
+            text_font: montserrat_34
+            text_align: right
+            text_color: 0xFFFFFF
+
+  top_layer:
+    widgets:
+      - label:
+          text: "\uF1EB"
+          id: lbl_hastatus
+          hidden: true
+          align: top_right
+          x: -2
+          y: 7
+          text_align: right
+          text_color: 0xFFFFFF
+      - buttonmatrix:
+          align: bottom_mid
+          styles: header_footer
+          pad_all: 0
+          outline_width: 0
+          id: top_layer2
+          items:
+            styles: header_footer
+          rows:
+            - buttons:
+              - id: page_prev
+                text: "\uF053"
+                on_press:
+                  then:
+                    lvgl.page.show: left_page
+              - id: page_home
+                text: "\uF015"
+                on_press:
+                  then:
+                    lvgl.page.show: main_page
+              - id: page_next
+                text: "\uF054"
+                on_press:
+                  then:
+                    lvgl.page.show: right_page
